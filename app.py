@@ -4,15 +4,41 @@ import plotly.express as px
 import numpy as np
 
 st.set_page_config(page_title="多参数LED选型系统", layout="wide")
-st.title("💡 多维度二极管智能检索系统")
+st.title("💡 多维度二极管智能选型系统")
 
 @st.cache_data
 def load_data():
-    df = pd.read_excel("LED_database.xlsx")
-    return df
-
-df = load_data()
-
+    try:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(current_dir, "LED_database.xlsx")
+        
+        # 先读取所有列看看
+        df = pd.read_excel(file_path)
+        
+        # 如果Excel为空，返回空
+        if df.empty:
+            return df
+        
+        # 只保留需要的列（如果列存在的话）
+        needed_cols = ['Model', 'Vendor', 'CCT', 'Dominant_wt', 'x', 'y', 'u', 'v']
+        existing_cols = [col for col in needed_cols if col in df.columns]
+        
+        if not existing_cols:
+            # 如果都没有匹配的列，显示所有列名供参考
+            st.error(f"Excel中没有找到需要的列。现有列：{list(df.columns)}")
+            return df
+        
+        df = df[existing_cols]
+        
+        # 删除空行
+        df = df.dropna()
+        
+        return df
+        
+    except Exception as e:
+        st.error(f"读取Excel失败：{str(e)}")
+        return pd.DataFrame()  # 返回空DataFrame
+      
 st.sidebar.header("🔍 输入目标参数与容差")
 
 # ========== 参数列表（请根据Excel实际列名修改） ==========
