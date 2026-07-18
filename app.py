@@ -47,11 +47,6 @@ if df is None or df.empty:
     st.error("❌ 数据加载失败")
     st.stop()
 
-# ========== 显示数据预览 ==========
-st.subheader("📊 数据预览（前5行）")
-st.dataframe(df.head(5), use_container_width=True)
-st.caption(f"总记录数：{len(df)} 条（已限制1000行）")
-
 # ========== 参数列表 ==========
 params = [
     ("CCT", "色温 (K)", 3000.0, 100.0, 300.0),
