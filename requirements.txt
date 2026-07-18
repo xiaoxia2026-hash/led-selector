@@ -3,6 +3,3 @@ pandas
 plotly
 numpy
 openpyxl
-
-
-add requirements
