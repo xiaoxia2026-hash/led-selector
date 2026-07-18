@@ -7,50 +7,50 @@ import os
 st.set_page_config(page_title="多参数LED选型系统", layout="wide")
 st.title("💡 多维度二极管智能检索系统")
 
-# ========== 数据加载（带详细调试） ==========
+# ========== 数据加载 ==========
 @st.cache_data
 def load_data():
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         file_path = os.path.join(current_dir, "LED_database.xlsx")
         
-        st.sidebar.write(f"📁 文件路径：{file_path}")
-        
         if not os.path.exists(file_path):
-            st.sidebar.error("❌ 文件不存在！")
+            st.error("❌ 文件不存在")
             return None
         
-        df = pd.read_excel(file_path)
-        st.sidebar.success(f"✅ 读取成功！共 {len(df)} 行，{len(df.columns)} 列")
-        st.sidebar.write("📋 列名：", list(df.columns))
+        # 限制读取行数（防止内存溢出）
+        df = pd.read_excel(file_path, nrows=1000)
         
         if df.empty:
-            st.sidebar.warning("⚠️ 数据为空")
+            st.warning("⚠️ 数据为空")
             return None
+        
+        # 强制转换数值列为数字类型
+        numeric_cols = ['Dominant_wt', '光通量 (lm)', '光效 (lm/W)', 'CCT', 'x', 'y', 'u', 'v']
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        # 删除关键列为空的行
+        df = df.dropna(subset=['CCT', 'x', 'y'])
         
         return df
         
     except Exception as e:
-        st.sidebar.error(f"❌ 错误：{str(e)}")
+        st.error(f"❌ 错误：{str(e)}")
         return None
 
 # 加载数据
 df = load_data()
 
-# 如果数据加载失败，显示错误并停止
-if df is None:
-    st.error("❌ 数据加载失败，请检查日志")
+if df is None or df.empty:
+    st.error("❌ 数据加载失败")
     st.stop()
 
-# 如果数据为空，显示提示
-if df.empty:
-    st.warning("⚠️ 数据为空，请检查Excel文件内容")
-    st.stop()
-
-# ========== 显示数据预览（验证数据） ==========
+# ========== 显示数据预览 ==========
 st.subheader("📊 数据预览（前5行）")
 st.dataframe(df.head(5), use_container_width=True)
-st.caption(f"总记录数：{len(df)} 条")
+st.caption(f"总记录数：{len(df)} 条（已限制1000行）")
 
 # ========== 参数列表 ==========
 params = [
@@ -70,7 +70,7 @@ cols = st.sidebar.columns(2)
 
 for i, (col, label, default, step, tol_default) in enumerate(params):
     if col not in df.columns:
-        st.sidebar.warning(f"⚠️ 列 '{col}' 不存在，请检查Excel列名")
+        st.sidebar.warning(f"⚠️ 列 '{col}' 不存在")
         continue
     with cols[i % 2]:
         targets[col] = st.number_input(f"{label}", value=default, step=step, format="%.4f")
@@ -114,7 +114,7 @@ if st.button("🚀 开始检索", type="primary"):
         display_df = results.head(top_n).copy()
         for col in targets:
             if col in display_df.columns:
-                display_df[col] = display_df[col].map(lambda x: f"{x:.4f}")
+                display_df[col] = display_df[col].map(lambda x: f"{x:.4f}" if pd.notna(x) else "")
         
         cols_to_show = ['Model', 'Vendor'] + list(targets.keys()) + ['综合得分']
         available_cols = [c for c in cols_to_show if c in display_df.columns]
