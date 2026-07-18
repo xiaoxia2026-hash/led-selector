@@ -7,42 +7,50 @@ import os
 st.set_page_config(page_title="多参数LED选型系统", layout="wide")
 st.title("💡 多维度二极管智能检索系统")
 
-# ========== 数据加载函数（带错误处理） ==========
+# ========== 数据加载（带详细调试） ==========
 @st.cache_data
 def load_data():
     try:
-        # 获取当前文件所在目录
         current_dir = os.path.dirname(os.path.abspath(__file__))
         file_path = os.path.join(current_dir, "LED_database.xlsx")
         
-        # 检查文件是否存在
+        st.sidebar.write(f"📁 文件路径：{file_path}")
+        
         if not os.path.exists(file_path):
-            st.error(f"❌ 文件不存在：{file_path}")
-            return pd.DataFrame()
+            st.sidebar.error("❌ 文件不存在！")
+            return None
         
-        # 读取Excel
         df = pd.read_excel(file_path)
+        st.sidebar.success(f"✅ 读取成功！共 {len(df)} 行，{len(df.columns)} 列")
+        st.sidebar.write("📋 列名：", list(df.columns))
         
-        # 检查是否为空
         if df.empty:
-            st.warning("⚠️ Excel文件为空")
-            return df
-        
-        # 显示列名（调试用）
-        st.sidebar.write("📋 Excel列名：", list(df.columns))
+            st.sidebar.warning("⚠️ 数据为空")
+            return None
         
         return df
         
     except Exception as e:
-        st.error(f"❌ 读取Excel失败：{str(e)}")
-        return pd.DataFrame()
+        st.sidebar.error(f"❌ 错误：{str(e)}")
+        return None
 
-# ========== 加载数据 ==========
+# 加载数据
 df = load_data()
 
-# 检查数据是否加载成功
+# 如果数据加载失败，显示错误并停止
+if df is None:
+    st.error("❌ 数据加载失败，请检查日志")
+    st.stop()
+
+# 如果数据为空，显示提示
 if df.empty:
-    st.stop()  # 停止执行，避免后续错误
+    st.warning("⚠️ 数据为空，请检查Excel文件内容")
+    st.stop()
+
+# ========== 显示数据预览（验证数据） ==========
+st.subheader("📊 数据预览（前5行）")
+st.dataframe(df.head(5), use_container_width=True)
+st.caption(f"总记录数：{len(df)} 条")
 
 # ========== 参数列表 ==========
 params = [
@@ -61,18 +69,17 @@ tolerances = {}
 cols = st.sidebar.columns(2)
 
 for i, (col, label, default, step, tol_default) in enumerate(params):
+    if col not in df.columns:
+        st.sidebar.warning(f"⚠️ 列 '{col}' 不存在，请检查Excel列名")
+        continue
     with cols[i % 2]:
-        # 检查列是否存在
-        if col not in df.columns:
-            st.sidebar.warning(f"⚠️ 列 '{col}' 不存在")
-            continue
         targets[col] = st.number_input(f"{label}", value=default, step=step, format="%.4f")
         tolerances[col] = st.number_input(f"容差±", value=tol_default, step=step/2, format="%.4f", key=f"tol_{col}")
 
 st.sidebar.markdown("---")
 top_n = st.sidebar.slider("显示最优匹配数量", 1, 20, 5)
 
-# ========== 核心筛选算法 ==========
+# ========== 筛选算法 ==========
 def multi_param_filter(df, targets, tolerances):
     mask = pd.Series([True] * len(df))
     for col in targets:
@@ -95,26 +102,24 @@ def multi_param_filter(df, targets, tolerances):
     candidates = candidates.sort_values('综合得分')
     return candidates
 
-# ========== 检索按钮 ==========
+# ========== 检索 ==========
 if st.button("🚀 开始检索", type="primary"):
     results = multi_param_filter(df, targets, tolerances)
     
     if results.empty:
-        st.error("❌ 未找到完全符合容差范围的型号，请适当放宽容差。")
+        st.error("❌ 未找到符合容差范围的型号，请放宽容差。")
     else:
-        st.success(f"✅ 找到 {len(results)} 个符合条件的型号，展示最优的 {top_n} 个")
+        st.success(f"✅ 找到 {len(results)} 个符合条件的型号")
         
         display_df = results.head(top_n).copy()
         for col in targets:
             if col in display_df.columns:
                 display_df[col] = display_df[col].map(lambda x: f"{x:.4f}")
         
-        # 显示表格
         cols_to_show = ['Model', 'Vendor'] + list(targets.keys()) + ['综合得分']
         available_cols = [c for c in cols_to_show if c in display_df.columns]
         st.dataframe(display_df[available_cols], use_container_width=True)
         
-        # 绘图
         col1, col2 = st.columns(2)
         with col1:
             if 'x' in results.columns and 'y' in results.columns:
@@ -141,7 +146,7 @@ if st.button("🚀 开始检索", type="primary"):
                 st.bar_chart(vendor_count)
                 st.caption("最优匹配结果中的厂家占比")
 
-# ========== 查看完整数据库 ==========
+# ========== 完整数据库 ==========
 with st.expander("📂 查看完整数据库一览"):
     st.dataframe(df, use_container_width=True)
     st.caption(f"共 {len(df)} 条记录")
