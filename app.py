@@ -2,46 +2,49 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import numpy as np
+import os
 
 st.set_page_config(page_title="多参数LED选型系统", layout="wide")
-st.title("💡 多维度二极管智能选型系统")
+st.title("💡 多维度二极管智能检索系统")
 
+# ========== 数据加载函数（带错误处理） ==========
 @st.cache_data
 def load_data():
     try:
+        # 获取当前文件所在目录
         current_dir = os.path.dirname(os.path.abspath(__file__))
         file_path = os.path.join(current_dir, "LED_database.xlsx")
         
-        # 先读取所有列看看
+        # 检查文件是否存在
+        if not os.path.exists(file_path):
+            st.error(f"❌ 文件不存在：{file_path}")
+            return pd.DataFrame()
+        
+        # 读取Excel
         df = pd.read_excel(file_path)
         
-        # 如果Excel为空，返回空
+        # 检查是否为空
         if df.empty:
+            st.warning("⚠️ Excel文件为空")
             return df
         
-        # 只保留需要的列（如果列存在的话）
-        needed_cols = ['Model', 'Vendor', 'CCT', 'Dominant_wt', 'x', 'y', 'u', 'v']
-        existing_cols = [col for col in needed_cols if col in df.columns]
-        
-        if not existing_cols:
-            # 如果都没有匹配的列，显示所有列名供参考
-            st.error(f"Excel中没有找到需要的列。现有列：{list(df.columns)}")
-            return df
-        
-        df = df[existing_cols]
-        
-        # 删除空行
-        df = df.dropna()
+        # 显示列名（调试用）
+        st.sidebar.write("📋 Excel列名：", list(df.columns))
         
         return df
         
     except Exception as e:
-        st.error(f"读取Excel失败：{str(e)}")
-        return pd.DataFrame()  # 返回空DataFrame
-      
-st.sidebar.header("🔍 输入目标参数与容差")
+        st.error(f"❌ 读取Excel失败：{str(e)}")
+        return pd.DataFrame()
 
-# ========== 参数列表（请根据Excel实际列名修改） ==========
+# ========== 加载数据 ==========
+df = load_data()
+
+# 检查数据是否加载成功
+if df.empty:
+    st.stop()  # 停止执行，避免后续错误
+
+# ========== 参数列表 ==========
 params = [
     ("CCT", "色温 (K)", 3000.0, 100.0, 300.0),
     ("Dominant_wt", "主波长 (nm)", 580.0, 1.0, 5.0),
@@ -51,12 +54,18 @@ params = [
     ("v", "CIE-v", 0.4500, 0.001, 0.01),
 ]
 
+st.sidebar.header("🔍 输入目标参数与容差")
+
 targets = {}
 tolerances = {}
 cols = st.sidebar.columns(2)
 
 for i, (col, label, default, step, tol_default) in enumerate(params):
     with cols[i % 2]:
+        # 检查列是否存在
+        if col not in df.columns:
+            st.sidebar.warning(f"⚠️ 列 '{col}' 不存在")
+            continue
         targets[col] = st.number_input(f"{label}", value=default, step=step, format="%.4f")
         tolerances[col] = st.number_input(f"容差±", value=tol_default, step=step/2, format="%.4f", key=f"tol_{col}")
 
@@ -105,7 +114,7 @@ if st.button("🚀 开始检索", type="primary"):
         available_cols = [c for c in cols_to_show if c in display_df.columns]
         st.dataframe(display_df[available_cols], use_container_width=True)
         
-        # ====== 绘图部分（修复版） ======
+        # 绘图
         col1, col2 = st.columns(2)
         with col1:
             if 'x' in results.columns and 'y' in results.columns:
@@ -132,5 +141,7 @@ if st.button("🚀 开始检索", type="primary"):
                 st.bar_chart(vendor_count)
                 st.caption("最优匹配结果中的厂家占比")
 
+# ========== 查看完整数据库 ==========
 with st.expander("📂 查看完整数据库一览"):
     st.dataframe(df, use_container_width=True)
+    st.caption(f"共 {len(df)} 条记录")
